@@ -10,10 +10,16 @@ struct AppSettings: Codable, Equatable {
 /// Global, one-off flags.
 enum PauseFlags {
     private static let seenDeepSleepWarningKey = "PauseHasSeenDeepSleepWarning"
+    private static let completedOnboardingKey = "PauseHasCompletedOnboarding"
 
     static var hasSeenDeepSleepWarning: Bool {
         get { UserDefaults.standard.bool(forKey: seenDeepSleepWarningKey) }
         set { UserDefaults.standard.set(newValue, forKey: seenDeepSleepWarningKey) }
+    }
+
+    static var hasCompletedOnboarding: Bool {
+        get { UserDefaults.standard.bool(forKey: completedOnboardingKey) }
+        set { UserDefaults.standard.set(newValue, forKey: completedOnboardingKey) }
     }
 }
 

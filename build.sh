@@ -33,8 +33,22 @@ fi
 cp Info.plist "$APP/Contents/Info.plist"
 [[ -f AppIcon.icns ]] && cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-echo "▸ Signing (ad-hoc)..."
-codesign --force --deep --sign - "$APP"
+# Sign with a Developer ID if one is installed, otherwise fall back to ad-hoc.
+# A Developer ID certificate requires a paid Apple Developer Program membership;
+# without it macOS shows a Gatekeeper warning on first launch, which the Homebrew
+# cask and install.sh both avoid by clearing the quarantine attribute.
+IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+  | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)"/\1/')
+
+if [[ -n "$IDENTITY" ]]; then
+  echo "▸ Signing with: $IDENTITY"
+  codesign --force --deep --options runtime --timestamp \
+    --sign "$IDENTITY" "$APP"
+  echo "   Signed for distribution. Run ./notarize.sh to notarize."
+else
+  echo "▸ Signing (ad-hoc — no Developer ID certificate found)..."
+  codesign --force --deep --sign - "$APP"
+fi
 
 echo "✅ Built $PWD/$APP"
 lipo -archs "$APP/Contents/MacOS/AutoPauseMacApps" 2>/dev/null | sed 's/^/   architectures: /'

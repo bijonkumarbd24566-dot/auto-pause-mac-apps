@@ -109,18 +109,63 @@ total** — and one click resumes it exactly where it was. Nothing is closed, no
 
 ## Install
 
-**[⬇ Download the free DMG →](https://github.com/fazalrshah/auto-pause-mac-apps/releases/latest)**
+### Recommended: Homebrew (no warnings, one command)
+
+```bash
+brew install --cask fazalrshah/tap/auto-pause-mac-apps
+```
+
+Homebrew clears the download quarantine flag automatically, so the app just opens. This is the
+smoothest way to install it.
+
+### Or: one-line installer
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fazalrshah/auto-pause-mac-apps/main/install.sh | bash
+```
+
+Downloads the latest release, installs to `/Applications`, clears the quarantine flag and
+launches it. [Read the script first](install.sh) — it's short and does exactly that, nothing else.
+
+### Or: download the DMG manually
+
+**[⬇ Download AutoPauseMacApps-1.2.0.dmg →](https://github.com/fazalrshah/auto-pause-mac-apps/releases/latest)**
 
 1. Open the DMG and drag **Auto Pause Mac Apps** into Applications.
-2. First launch only: right-click the app → **Open** → confirm.
+2. Double-click it. macOS will say *"Apple could not verify… is free of malware"* — this is
+   expected (see below). Click **Done**.
+3. Open **System Settings → Privacy & Security**, scroll to Security, and click
+   **Open Anyway** next to Auto Pause Mac Apps. Confirm with Touch ID or your password.
 
-Step 2 exists because the app is ad-hoc signed rather than notarized — Apple charges $99/year
-for notarization and this app is free, so that cost isn't passed on to you. The full source is
-here for you to read or build yourself.
+> **On macOS 15 and later, right-clicking → Open no longer bypasses this.** The
+> **Privacy & Security → Open Anyway** route above is the only way. You only do it once.
 
-Look for the ⏸ icon in your menu bar. There is no Dock icon and no window.
+To skip step 3 entirely, use Homebrew or the installer above — or clear the flag yourself:
 
-### Build it yourself
+```bash
+xattr -dr com.apple.quarantine "/Applications/Auto Pause Mac Apps.app"
+```
+
+### Why does macOS show that warning?
+
+Because the app isn't **notarized**. Notarization requires a "Developer ID Application"
+certificate, which Apple issues only to **paid** Apple Developer Program members at
+**$99/year**. This app is free, has no ads, no subscription and no revenue, so that certificate
+isn't in place yet.
+
+The warning does **not** mean anything was detected in the app. It means Apple hasn't been paid
+to check it. What you can do instead of taking my word for it:
+
+- **Read the source.** It's all here, dependency-free, and [documented module by module](docs/ARCHITECTURE.md).
+- **Build it yourself** in one command (below) — then it's your own binary, no warning.
+- **Verify the download** against the checksum published in each [release](https://github.com/fazalrshah/auto-pause-mac-apps/releases).
+
+If the project ever gets funded, [`notarize.sh`](notarize.sh) is already written and will make
+the warning disappear for everyone.
+
+**Maintainer:** Fazal Shah — [github.com/fazalrshah](https://github.com/fazalrshah). MIT licensed.
+
+### Build from source
 
 Requires only Xcode Command Line Tools — no Xcode install needed.
 
@@ -129,8 +174,11 @@ git clone https://github.com/fazalrshah/auto-pause-mac-apps.git
 cd auto-pause-mac-apps
 ./build.sh                 # native build
 ./build.sh --universal     # Apple Silicon + Intel
-./package-dmg.sh 1.1.0     # build the DMG
+./package-dmg.sh 1.2.0     # build the DMG
 ```
+
+`build.sh` signs with a Developer ID automatically if you have one installed, and falls back to
+ad-hoc signing if you don't.
 
 ---
 
@@ -185,6 +233,21 @@ Google Chrome — footprint 4.31 GB · resident 275 MB
 Freezing returned roughly **4 GB of actual RAM** while the footprint number hardly moved. Tools
 that display only footprint make pausing look like it did nothing at all.
 
+### 🎬 Guided first run
+
+Because the app has no Dock icon and no window, a menu-bar-only utility can vanish the moment
+you install it. A short animated walkthrough runs on first launch: what the two tiers do, how
+Free Up Memory works, and an arrow pointing at where in the menu bar to find it — plus the
+option to start at login. You can reopen it any time from **Settings ▸ Show the walkthrough again**.
+
+### 🚀 Start at login
+
+Toggle it on in **Settings** (the gear in the footer) and the app registers itself with macOS's
+modern login-items system via `SMAppService` — the same list in System Settings ▸ General ▸ Login
+Items. No helper bundle, no deprecated APIs. The toggle reads the status back after registering
+rather than assuming it worked, so if macOS wants approval or the app isn't in `/Applications`
+it tells you instead of silently failing.
+
 ### ⏱ Auto-pause when idle
 
 Per app, off by default: freeze automatically after N minutes in the background, thaw on return.
@@ -204,6 +267,14 @@ No. Pause never touches your data — the app is frozen in memory, exactly as it
 quits the app the normal way: apps that autosave save first, and apps that don't show their usual
 "Do you want to save?" dialog and stay open, in which case the app is left frozen instead.
 **Nothing is ever force-quit.** No `SIGKILL`, ever.
+
+### Why does macOS say "Apple could not verify this app"?
+
+Because it isn't notarized — Apple only issues the required certificate to paid Developer
+Program members ($99/year), and this app is free. Nothing was detected in it. Install via
+Homebrew or the one-line installer and you won't see the dialog at all; or clear the flag with
+`xattr -dr com.apple.quarantine "/Applications/Auto Pause Mac Apps.app"`. On macOS 15+,
+right-click → Open no longer works — use System Settings → Privacy & Security → Open Anyway.
 
 ### Does it need root, a password, or special permissions?
 

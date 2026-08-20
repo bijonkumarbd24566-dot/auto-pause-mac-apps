@@ -2,12 +2,52 @@ import SwiftUI
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var onboardingWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        if !PauseFlags.hasCompletedOnboarding {
+            // Give the status item a moment to appear so the "look up here" hint lands
+            // on a menu bar that already shows our icon.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                self?.showOnboarding()
+            }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Never strand frozen apps: resume everything on quit.
         for rec in PausedStore.shared.records {
             ProcessControl.resumeTree(root: rec.pid)
             PausedStore.shared.remove(pid: rec.pid)
         }
+    }
+
+    func showOnboarding() {
+        if let existing = onboardingWindow {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 460),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered, defer: false)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
+        window.center()
+        window.contentView = NSHostingView(rootView: OnboardingView { [weak self] in
+            PauseFlags.hasCompletedOnboarding = true
+            self?.onboardingWindow?.close()
+            self?.onboardingWindow = nil
+        })
+        window.isReleasedWhenClosed = false
+        onboardingWindow = window
+
+        // An LSUIElement app is not activated by default, so ask for focus explicitly.
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -18,7 +58,7 @@ struct PauseApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(model: model)
+            MenuView(model: model, showOnboarding: { appDelegate.showOnboarding() })
         } label: {
             Image(systemName: model.pausedCount > 0 ? "pause.circle.fill" : "pause.circle")
         }

@@ -130,7 +130,9 @@ All atomic JSON in `~/Library/Application Support/Pause/` (path kept stable acro
 | `SystemDetailView.swift` | Ring gauge, usage history, App/Wired/Compressed/Free/Swap breakdown, top processes. |
 | `ReclaimView.swift` | Local Model Mode: target slider, feasibility estimate, and Restore. |
 | `DeepSleepWarningView.swift` | First-run warning: explains Deep Sleep actually quits the app, reports that app's restore status, offers to enable window restore. |
-| `PauseApp.swift` | `MenuBarExtra` host. On quit, resumes every frozen app so nothing is ever stranded. |
+| `PauseApp.swift` | `MenuBarExtra` host plus the `NSApplicationDelegate`. Presents the first-run walkthrough in a real `NSWindow` (an `LSUIElement` app isn't activated by default, so it calls `NSApp.activate` explicitly), and resumes every frozen app on quit so nothing is ever stranded. |
+| `OnboardingView.swift` | Four-page animated walkthrough: welcome, the two tiers, Free Up Memory, and where to find the app + start-at-login. Exists because a menu-bar-only app with no Dock icon is easy to lose immediately after installing. |
+| `LaunchAtLogin.swift` | `SMAppService.mainApp` wrapper. Registration is idempotent (registering when already enabled throws), and the status is read back afterwards — `register()` can succeed while the item still needs approval, or not take effect when the app runs from a DMG or build folder. |
 
 > **Naming note.** The product is *Auto Pause Mac Apps*; the SwiftPM target and binary are
 > `AutoPauseMacApps`. The Application Support directory deliberately remains `Pause/` — renaming

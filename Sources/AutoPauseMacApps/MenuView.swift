@@ -2,8 +2,12 @@ import SwiftUI
 
 struct MenuView: View {
     @ObservedObject var model: AppListModel
+    /// Lets the user re-open the first-run walkthrough from the menu.
+    var showOnboarding: () -> Void = {}
     @State private var showSystemDetail = false
     @State private var showReclaim = false
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var showSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -144,6 +148,16 @@ struct MenuView: View {
             .disabled(model.pausedCount == 0)
             Spacer()
             Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+            }
+            .help("Settings")
+            .popover(isPresented: $showSettings, arrowEdge: .top) {
+                settingsPanel
+            }
+
+            Button {
                 NSApp.terminate(nil)
             } label: {
                 Image(systemName: "power")
@@ -153,6 +167,57 @@ struct MenuView: View {
         .buttonStyle(.borderless)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var settingsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Settings").font(.system(size: 13, weight: .semibold))
+
+            Toggle(isOn: $launchAtLogin) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Start at login").font(.system(size: 12, weight: .medium))
+                    Text("Keep it running so it's there when you need it")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            .onChange(of: launchAtLogin) { _, wants in
+                if case .failure(let error) = LaunchAtLogin.set(wants) {
+                    model.notice = "Couldn't change the login item: \(error.localizedDescription)"
+                    launchAtLogin = LaunchAtLogin.isEnabled
+                }
+            }
+
+            if LaunchAtLogin.requiresApproval {
+                Button {
+                    LaunchAtLogin.openLoginItemsSettings()
+                } label: {
+                    Label("Approve in System Settings", systemImage: "arrow.up.forward.app")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.orange)
+            }
+
+            Divider()
+
+            Button {
+                showSettings = false
+                showOnboarding()
+            } label: {
+                Label("Show the walkthrough again", systemImage: "sparkles")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+
+            Link(destination: URL(string: "https://github.com/fazalrshah/auto-pause-mac-apps")!) {
+                Label("Source & docs on GitHub", systemImage: "link")
+                    .font(.caption)
+            }
+        }
+        .padding(14)
+        .frame(width: 250)
+        .onAppear { launchAtLogin = LaunchAtLogin.isEnabled }
     }
 
     /// Fills available vertical space up to the screen's height, rather than an arbitrary cap.
