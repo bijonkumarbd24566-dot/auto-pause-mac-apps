@@ -1,7 +1,8 @@
+# Build output
 .build/
 .build-arm64/
 .build-x86_64/
 .dmg-stage/
-Pause.app/
+*.app/
 *.dmg
 .DS_Store

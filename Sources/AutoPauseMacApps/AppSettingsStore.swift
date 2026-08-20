@@ -22,6 +22,9 @@ final class AppSettingsStore {
 
     private let url: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            // Directory name intentionally stays "Pause" across the rename to
+            // "Auto Pause Mac Apps": changing it would orphan existing records and
+            // strand apps that are currently frozen on users' machines.
             .appendingPathComponent("Pause", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("settings.json")

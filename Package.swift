@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Pause",
+    name: "AutoPauseMacApps",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Pause",
-            path: "Sources/Pause"
+            name: "AutoPauseMacApps",
+            path: "Sources/AutoPauseMacApps"
         )
     ]
 )

@@ -1,8 +1,8 @@
-# Architecture — module by module
+# Auto Pause Mac Apps — Architecture, module by module
 
-Pause is a single SwiftUI menu-bar executable built with Swift Package Manager. No Xcode
-project, no external dependencies, no bundled frameworks. Every module below is one file
-in `Sources/Pause/`.
+Auto Pause Mac Apps is a single SwiftUI menu-bar executable built with Swift Package
+Manager. No Xcode project, no external dependencies, no bundled frameworks. Every module
+below is one file in `Sources/AutoPauseMacApps/`.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -111,7 +111,7 @@ behaving correctly — and it's exactly why per-app *resident* memory is the hon
 
 ## Persistence — three small stores
 
-All atomic JSON in `~/Library/Application Support/Pause/`.
+All atomic JSON in `~/Library/Application Support/Pause/` (path kept stable across the rename — see the naming note below).
 
 | File | Module | Purpose |
 |---|---|---|
@@ -131,3 +131,7 @@ All atomic JSON in `~/Library/Application Support/Pause/`.
 | `ReclaimView.swift` | Local Model Mode: target slider, feasibility estimate, and Restore. |
 | `DeepSleepWarningView.swift` | First-run warning: explains Deep Sleep actually quits the app, reports that app's restore status, offers to enable window restore. |
 | `PauseApp.swift` | `MenuBarExtra` host. On quit, resumes every frozen app so nothing is ever stranded. |
+
+> **Naming note.** The product is *Auto Pause Mac Apps*; the SwiftPM target and binary are
+> `AutoPauseMacApps`. The Application Support directory deliberately remains `Pause/` — renaming
+> it would orphan existing records and strand apps that users currently have frozen.
