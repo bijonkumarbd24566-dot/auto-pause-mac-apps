@@ -109,23 +109,27 @@ total** — and one click resumes it exactly where it was. Nothing is closed, no
 
 ## Install
 
-### Recommended: Homebrew (no warnings, one command)
-
-```bash
-brew install --cask fazalrshah/tap/auto-pause-mac-apps
-```
-
-Homebrew clears the download quarantine flag automatically, so the app just opens. This is the
-smoothest way to install it.
-
-### Or: one-line installer
+### Recommended: one-line installer (no warnings)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fazalrshah/auto-pause-mac-apps/main/install.sh | bash
 ```
 
-Downloads the latest release, installs to `/Applications`, clears the quarantine flag and
-launches it. [Read the script first](install.sh) — it's short and does exactly that, nothing else.
+Downloads the latest release, installs it to `/Applications`, clears the download quarantine
+flag and launches it. That last step is what prevents the *"Apple could not verify…"* dialog.
+[Read the script first](install.sh) — it's short and does exactly that, nothing else.
+
+### Or: Homebrew
+
+```bash
+brew tap fazalrshah/tap
+brew trust --cask fazalrshah/tap/auto-pause-mac-apps
+brew install --cask auto-pause-mac-apps
+```
+
+Recent Homebrew versions refuse to load casks from third-party taps until you trust them
+explicitly, hence the middle step. Homebrew clears the quarantine flag too, so the app opens
+normally. Update later with `brew upgrade --cask auto-pause-mac-apps`.
 
 ### Or: download the DMG manually
 
