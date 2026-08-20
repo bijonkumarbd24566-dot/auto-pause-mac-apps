@@ -47,42 +47,63 @@ no telemetry, and no paid tier. There is nothing to buy.
 
 ## Screenshots
 
-### The main panel — every app and service, sorted by real memory use
+### The main panel — every app and service, ranked by real memory use
 
-![Auto Pause Mac Apps main menu bar panel showing frozen apps, running apps sorted by RAM, and background services](docs/screenshots/main-panel.png)
+![Auto Pause Mac Apps menu bar panel on macOS showing four frozen apps pinned at the top, running apps including Microsoft Edge at 3.22 GB and Claude at 2.03 GB with live memory sparklines, and a background services section listing bun, node and system daemons](docs/screenshots/main-panel.png)
 
-Frozen apps pin to the top so you can always find and resume them. Each row shows **resident
-RAM** (large) and **total footprint** (dim), a live sparkline, and buttons to Pause, Deep Sleep,
-or open details. Background services get their own section, marked *freeze only*.
+One panel, three sections:
+
+- **Suspended (top)** — Messages, Mail, Calendar and TextEdit are `FROZEN`, each with a green
+  button to bring them straight back. They pin to the top so a frozen app is never lost.
+- **Apps** — running apps sorted by the RAM they actually hold, each with a live sparkline and
+  buttons to Pause (⏸), Deep Sleep (🌙) or open details.
+- **Background services** — marked *freeze only*, because quitting a daemon can break sync or
+  backups.
+
+Look at the frozen **Mail** row: `9.5 MB` resident against `399.9 MB` footprint. Mail is holding
+9.5 MB of real RAM — the other ~390 MB has already been compressed or swapped out. That gap is
+exactly what tools showing only Activity Monitor's footprint number hide from you.
+
+The header reads `7 suspended` and `12.47 GB of 16 GB used`, over a live system usage graph.
 
 ### Free Up Memory — make room for a local model in one click
 
-![Free Up Memory dialog with a target slider set to 8 GB and an estimate of available memory](docs/screenshots/free-up-memory.png)
+![Free Up Memory dialog with a target slider set to 8 GB, warning that only about 7.42 GB is available to free, and a Free 8 GB button](docs/screenshots/free-up-memory.png)
 
-Set a target in GB. The app freezes background apps and services heaviest-first until it hits
-your number, skipping whatever you're actively using. It tells you honestly if your target
-isn't achievable, and **Restore** puts back exactly what it froze.
+Set a target in GB and the app freezes background apps and services heaviest-first until it
+reaches it. Your frontmost app and ~30 protected system processes are never touched.
+
+Note the honesty: with 8 GB requested it warns **"Only about 7.42 GB is available to free"**
+rather than silently under-delivering. Afterwards, **Restore** puts back precisely the set it
+froze — anything you froze by hand stays frozen.
 
 ### System dashboard — where your memory actually went
 
-![Memory pressure dashboard showing a ring gauge, usage history graph, and App/Wired/Compressed/Free/Swap breakdown](docs/screenshots/system-dashboard.png)
+![Memory pressure dashboard showing a 77 percent ring gauge marked Warning, a usage history graph, and a breakdown of App 5.06 GB, Wired 2.43 GB, Compressed 4.97 GB, Free 436.5 MB and Swap Used 4.4 GB](docs/screenshots/system-dashboard.png)
 
-A real memory-pressure gauge with Normal/Warning/Critical thresholds, usage history, and a full
-App / Wired / Compressed / Free / Swap breakdown read from `host_statistics64`.
+A real pressure gauge with Normal / Warning / Critical thresholds, usage history, and the full
+breakdown from `host_statistics64`: **App 5.06 GB · Wired 2.43 GB · Compressed 4.97 GB · Free
+436.5 MB · Swap 4.4 GB**.
 
-### Per-app detail — history and automatic pausing
+This view explains why "Memory Used" can look stuck. Nearly 5 GB here is *compressed* — data
+macOS has already squeezed to make room. Compressed pages still count as used, so the headline
+number stays high even while apps are being frozen and memory is genuinely being reclaimed.
 
-![Per-app detail popover showing a memory history graph and an auto-pause when idle toggle](docs/screenshots/app-detail.png)
+### Per-app detail — memory history and automatic pausing
 
-Every app gets a memory history graph and an **Auto-pause when idle** switch: freeze this app
-automatically after N minutes in the background, thaw it when you return.
+![Microsoft Edge detail popover showing 3.83 GB in RAM of 6.57 GB total, a memory graph over the last 120 seconds, an auto-pause when idle toggle, and a Pause Now button](docs/screenshots/app-detail.png)
+
+Every app has a detail view with its resident-vs-total split (**Edge: 3.83 GB in RAM · 6.57 GB
+total**), a rolling two-minute memory graph, and **Auto-pause when idle** — freeze this app
+automatically after N minutes in the background, thaw it when you come back. Off by default,
+set per app.
 
 ### Frozen apps stay visible and instantly resumable
 
-![Detail view of a frozen app showing its reduced memory and a Resume button](docs/screenshots/frozen-app.png)
+![TextEdit detail popover showing the app frozen at 22.9 MB in RAM of 58.8 MB total with a Resume button](docs/screenshots/frozen-app.png)
 
-A frozen app is never lost. It keeps its row, shows what it gave back, and one click brings it
-straight back to life.
+A frozen app keeps its row and its numbers — TextEdit sits at **22.9 MB in RAM · 58.8 MB
+total** — and one click resumes it exactly where it was. Nothing is closed, nothing is lost.
 
 ---
 

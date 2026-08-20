@@ -6,3 +6,8 @@
 *.app/
 *.dmg
 .DS_Store
+
+# Raw screenshot exports at the repo root; canonical PNGs live in docs/screenshots/
+# (anchored with a leading slash: an unanchored pattern also matches docs/screenshots
+# on case-insensitive filesystems)
+/Screenshots/
