@@ -55,18 +55,31 @@ struct ReclaimView: View {
                     }
                     .padding(6)
                 }
-                .frame(maxHeight: 260)
+                // An explicit height, not maxHeight: a ScrollView has no intrinsic size, so
+                // with only a maximum it collapses to a couple of rows and the list has to be
+                // scrolled to review — which defeats the point of reviewing it.
+                .frame(height: listHeight)
             }
 
             Divider()
             footer
         }
-        .frame(width: 380)
+        .frame(width: 420)
         .onAppear {
             candidates = model.reclaimCandidates
             // Everything ticked except likely recording/calling apps.
             selected = Set(candidates.filter { !isCaptureApp($0) }.map(\.id))
         }
+    }
+
+    /// Tall enough to show every app at once where the screen allows, so the whole list can
+    /// be reviewed without scrolling.
+    private var listHeight: CGFloat {
+        let rowHeight: CGFloat = 34
+        let contentHeight = CGFloat(candidates.count) * rowHeight + 12
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
+        let chrome: CGFloat = 300 // header, select-all bar, footer, padding
+        return max(120, min(contentHeight, screenHeight - chrome))
     }
 
     private var header: some View {
