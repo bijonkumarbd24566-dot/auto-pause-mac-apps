@@ -5,56 +5,68 @@
 #
 # Downloads the latest release, installs it to /Applications, and clears the
 # quarantine attribute macOS applies to downloaded files. Clearing quarantine is
-# what removes the "Apple could not verify..." dialog — it is the same thing
-# Homebrew does for every unnotarized cask.
+# what removes the "Apple could not verify..." dialog — the same thing Homebrew
+# does for every unnotarized cask.
+#
+# Everything lives inside main() and is only called on the last line. When this
+# script is piped into bash, bash reads it from the same pipe the commands inherit
+# as stdin; without a wrapper, a child process can swallow part of the script and
+# bash resumes parsing mid-token. Defining a function forces bash to read the whole
+# body first. Child processes also get </dev/null so they cannot consume it.
 set -euo pipefail
 
-REPO="fazalrshah/auto-pause-mac-apps"
-APP_NAME="Auto Pause Mac Apps.app"
-INSTALL_DIR="/Applications"
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"; hdiutil detach "$TMP/mnt" -quiet 2>/dev/null || true' EXIT
+main() {
+  local repo="fazalrshah/auto-pause-mac-apps"
+  local app_name="Auto Pause Mac Apps.app"
+  local install_dir="/Applications"
+  local tmp
+  tmp=$(mktemp -d)
+  trap 'hdiutil detach "$tmp/mnt" -quiet 2>/dev/null || true; rm -rf "$tmp"' EXIT
 
-echo "▸ Finding the latest release..."
-URL=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-  | grep '"browser_download_url".*\.dmg"' | head -1 | cut -d'"' -f4)
+  echo "▸ Finding the latest release..."
+  local url
+  url=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" </dev/null \
+    | grep '"browser_download_url".*\.dmg"' | head -1 | cut -d'"' -f4)
 
-if [[ -z "$URL" ]]; then
-  echo "✗ Couldn't find a DMG in the latest release." >&2
-  echo "  Download manually: https://github.com/$REPO/releases/latest" >&2
-  exit 1
-fi
+  if [[ -z "$url" ]]; then
+    echo "✗ Couldn't find a DMG in the latest release." >&2
+    echo "  Download manually: https://github.com/$repo/releases/latest" >&2
+    return 1
+  fi
 
-echo "▸ Downloading $(basename "$URL")..."
-curl -fL# "$URL" -o "$TMP/app.dmg"
+  echo "▸ Downloading $(basename "$url")..."
+  curl -fL --progress-bar "$url" -o "$tmp/app.dmg" </dev/null
 
-echo "▸ Mounting..."
-mkdir -p "$TMP/mnt"
-hdiutil attach "$TMP/app.dmg" -nobrowse -quiet -mountpoint "$TMP/mnt"
+  echo "▸ Mounting..."
+  mkdir -p "$tmp/mnt"
+  hdiutil attach "$tmp/app.dmg" -nobrowse -quiet -mountpoint "$tmp/mnt" </dev/null
 
-if [[ ! -d "$TMP/mnt/$APP_NAME" ]]; then
-  echo "✗ '$APP_NAME' not found inside the disk image." >&2
-  exit 1
-fi
+  if [[ ! -d "$tmp/mnt/$app_name" ]]; then
+    echo "✗ '$app_name' not found inside the disk image." >&2
+    return 1
+  fi
 
-if [[ -d "$INSTALL_DIR/$APP_NAME" ]]; then
-  echo "▸ Removing the previous version..."
-  pkill -f "$APP_NAME/Contents/MacOS/" 2>/dev/null || true
-  sleep 1
-  rm -rf "${INSTALL_DIR:?}/$APP_NAME"
-fi
+  if [[ -d "$install_dir/$app_name" ]]; then
+    echo "▸ Replacing the previous version..."
+    pkill -f "$app_name/Contents/MacOS/" 2>/dev/null || true
+    sleep 1
+    rm -rf "${install_dir:?}/$app_name"
+  fi
 
-echo "▸ Installing to $INSTALL_DIR..."
-cp -R "$TMP/mnt/$APP_NAME" "$INSTALL_DIR/"
-hdiutil detach "$TMP/mnt" -quiet
+  echo "▸ Installing to $install_dir..."
+  cp -R "$tmp/mnt/$app_name" "$install_dir/"
+  hdiutil detach "$tmp/mnt" -quiet </dev/null || true
 
-# This is the step that prevents the Gatekeeper dialog.
-echo "▸ Clearing the quarantine flag..."
-xattr -dr com.apple.quarantine "$INSTALL_DIR/$APP_NAME" 2>/dev/null || true
+  # This is the step that prevents the Gatekeeper dialog.
+  echo "▸ Clearing the quarantine flag..."
+  xattr -dr com.apple.quarantine "$install_dir/$app_name" 2>/dev/null || true
 
-echo "▸ Launching..."
-open "$INSTALL_DIR/$APP_NAME"
+  echo "▸ Launching..."
+  open "$install_dir/$app_name" </dev/null
 
-echo
-echo "✅ Installed. Look for the pause icon in your menu bar."
-echo "   No Dock icon and no window — it lives entirely in the menu bar."
+  echo
+  echo "✅ Installed. Look for the pause icon in your menu bar."
+  echo "   No Dock icon and no window — it lives entirely in the menu bar."
+}
+
+main "$@"
