@@ -49,33 +49,41 @@ no telemetry, and no paid tier. There is nothing to buy.
 
 ### The main panel — every app and service, ranked by real memory use
 
-![Auto Pause Mac Apps menu bar panel on macOS showing four frozen apps pinned at the top, running apps including Microsoft Edge at 3.22 GB and Claude at 2.03 GB with live memory sparklines, and a background services section listing bun, node and system daemons](docs/screenshots/main-panel.png)
+![Auto Pause Mac Apps menu bar panel on macOS showing four frozen apps pinned at the top and running apps including Microsoft Edge at 3.22 GB and Claude at 2.03 GB with live memory sparklines](docs/screenshots/main-panel.png)
 
-One panel, three sections:
+Two sections:
 
 - **Suspended (top)** — Messages, Mail, Calendar and TextEdit are `FROZEN`, each with a green
   button to bring them straight back. They pin to the top so a frozen app is never lost.
 - **Apps** — running apps sorted by the RAM they actually hold, each with a live sparkline and
   buttons to Pause (⏸), Deep Sleep (🌙) or open details.
-- **Background services** — marked *freeze only*, because quitting a daemon can break sync or
-  backups.
+
+The footer holds **Free Up Memory**, **Resume All**, settings and quit.
 
 Look at the frozen **Mail** row: `9.5 MB` resident against `399.9 MB` footprint. Mail is holding
 9.5 MB of real RAM — the other ~390 MB has already been compressed or swapped out. That gap is
 exactly what tools showing only Activity Monitor's footprint number hide from you.
 
-The header reads `7 suspended` and `12.47 GB of 16 GB used`, over a live system usage graph.
-
-### Free Up Memory — make room for a local model in one click
+### Free Up Memory — review, then confirm
 
 ![Free Up Memory dialog with a target slider set to 8 GB, warning that only about 7.42 GB is available to free, and a Free 8 GB button](docs/screenshots/free-up-memory.png)
 
-Set a target in GB and the app freezes background apps and services heaviest-first until it
-reaches it. Your frontmost app and ~30 protected system processes are never touched.
+*(Screenshot from 1.2. In 1.3 this became a reviewable checklist — see below.)*
 
-Note the honesty: with 8 GB requested it warns **"Only about 7.42 GB is available to free"**
-rather than silently under-delivering. Afterwards, **Restore** puts back precisely the set it
-froze — anything you froze by hand stays frozen.
+Clicking **Free Up Memory** now shows you every app it proposes to pause, with its memory cost
+and a tickbox. Untick anything you're still using. **Nothing is paused until you press the
+confirm button.**
+
+- Your **frontmost app** is never listed.
+- **Auto Pause itself is never listed**, and refuses to freeze any process tree containing
+  itself — at the signal layer, not just in the selection logic.
+- **Recording and call apps** (QuickTime, OBS, ScreenFlow, Loom, Zoom, Teams, Meet, Discord,
+  Slack…) start **unticked** and are flagged *"may be recording or in a call"*.
+- **Background services and daemons are never touched** — see below.
+- Optionally remember your opt-outs so those apps are never offered again.
+
+Afterwards, **Restore** puts back exactly the set it paused, leaving anything you froze by hand
+still frozen.
 
 ### System dashboard — where your memory actually went
 
@@ -207,18 +215,22 @@ included**. Waking relaunches it and restores your windows and tabs in seconds.
 Before the first use it shows a warning explaining exactly what will happen, tells you whether
 *that specific app* will restore its windows, and offers to enable window restore for it.
 
-### 🧠 Free Up Memory — the local model button
+### 🧠 Free Up Memory — the local model button, with a safety net
 
-Set a GB target; the app freezes background apps and services heaviest-first until it's reached.
-Your frontmost app and ~30 protected system processes are never touched. It records the exact
-set it froze, so **Restore** undoes precisely that and leaves anything you froze by hand alone.
+Need several GB free to load a model? Click **Free Up Memory**, review the proposed list,
+untick anything you're using, and confirm. It pauses exactly what you approved — never your
+frontmost app, never itself, and never a background service.
 
-### ⚙️ Background services — memory nothing else surfaces
+**Restore** undoes precisely that set, leaving anything you froze by hand alone.
 
-Enumerates every process owned by your user account, groups stray processes under their parent
-service, and lists them with real memory costs: idle dev servers, updater daemons, sync helpers,
-speech services. Services are **freeze-only** — quitting a daemon can break sync or backups, and
-daemons have no state-restoration contract.
+### 🛡️ What it will never touch
+
+Auto Pause only ever pauses **apps you explicitly approve**, plus the helper processes those
+apps own. It does not enumerate, display or freeze background services and daemons.
+
+Version 1.2 did list and freeze them, and it was a mistake: freezing system daemons could leave
+a Mac hard to operate, and a single click could pause something critical with no warning. That
+capability was removed rather than patched.
 
 ### 📊 Honest memory numbers
 
@@ -310,9 +322,10 @@ actually lives.
 
 ### Which processes will it refuse to touch?
 
-Around 30 critical ones — `WindowServer`, `ControlCenter`, `coreaudiod`, `loginwindow`, `Finder`,
-`Dock` and similar. Freezing those would wedge the UI or kill audio, so they're permanently
-protected. It also never touches itself or processes owned by other users.
+Auto Pause only pauses regular apps you explicitly approve, plus the helper processes those apps
+own. Background services and system daemons are never listed or touched at all. It also refuses
+to freeze itself or any process tree containing itself — enforced when the signal is sent, so it
+holds regardless of what the UI asks for — and it can only ever signal processes owned by you.
 
 ### What happens if the app crashes while things are frozen?
 

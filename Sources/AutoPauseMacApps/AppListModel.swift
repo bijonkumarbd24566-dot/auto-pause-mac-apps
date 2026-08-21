@@ -8,11 +8,6 @@ enum AppState: Equatable {
     case sleeping  // quit with state preserved: 100% of RAM and swap released
 }
 
-enum EntryKind: Equatable {
-    case app       // a regular Dock app: can be paused or deep-slept
-    case service   // a background helper/daemon: can be frozen, never quit
-}
-
 struct AppEntry: Identifiable, Equatable {
     let id: String            // pid for live apps, bundleID for sleeping ones
     let pid: pid_t?           // nil once sleeping
@@ -25,11 +20,8 @@ struct AppEntry: Identifiable, Equatable {
     let state: AppState
     let launchDate: Date?
     let history: [UInt64]
-    var kind: EntryKind = .app
 
-    /// Services are frozen only — quitting a daemon can break sync, backups or system
-    /// features, and it has no state-restoration contract to bring it back.
-    var canDeepSleep: Bool { kind == .app && state != .sleeping }
+    var canDeepSleep: Bool { state != .sleeping }
 }
 
 @MainActor
@@ -42,7 +34,6 @@ final class AppListModel: ObservableObject {
     @Published var systemHistory: [UInt64] = []
     /// Transient message shown in the panel, e.g. when an app refuses to sleep.
     @Published var notice: String?
-    @Published var showServices = true
     /// Everything suspended by the last Local Model Mode run, so it can be undone exactly.
     @Published var reclaimSession: [pid_t] = []
 
@@ -155,10 +146,6 @@ final class AppListModel: ObservableObject {
             ))
         }
 
-        if showServices {
-            newEntries.append(contentsOf: serviceEntries(excluding: apps))
-        }
-
         // Sleeping apps are no longer processes; surface them from the store.
         for rec in SleptStore.shared.records {
             newEntries.append(AppEntry(
@@ -199,103 +186,52 @@ final class AppListModel: ObservableObject {
         if systemHistory.count > historyLimit { systemHistory.removeFirst(systemHistory.count - historyLimit) }
     }
 
-    /// Background processes that aren't part of any Dock app: dev servers, sync daemons,
-    /// updater helpers. Grouped by their top-level ancestor so one row covers a whole
-    /// service rather than a dozen unlabelled child pids.
-    private func serviceEntries(excluding apps: [NSRunningApplication]) -> [AppEntry] {
-        let procs = ProcessControl.userProcesses()
-        let byPid = Dictionary(procs.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
-
-        var appPids = Set<pid_t>()
-        for app in apps {
-            for pid in ProcessControl.processTree(root: app.processIdentifier) { appPids.insert(pid) }
-        }
-        let ownPid = ProcessInfo.processInfo.processIdentifier
-
-        func rootAncestor(_ info: ProcessControl.ProcInfo) -> ProcessControl.ProcInfo {
-            var cur = info, hops = 0
-            while cur.ppid > 1, let parent = byPid[cur.ppid], hops < 64 { cur = parent; hops += 1 }
-            return cur
-        }
-
-        struct Group { var info: ProcessControl.ProcInfo; var resident: UInt64 = 0
-                       var footprint: UInt64 = 0; var pids: [pid_t] = [] }
-        var groups: [pid_t: Group] = [:]
-
-        for proc in procs where !appPids.contains(proc.pid) && proc.pid != ownPid {
-            let root = rootAncestor(proc)
-            if ProcessControl.isProtected(root) || root.pid == ownPid { continue }
-            let mem = ProcessControl.memoryInfo(of: proc.pid)
-            var group = groups[root.pid] ?? Group(info: root)
-            group.resident += mem.resident
-            group.footprint += mem.footprint
-            group.pids.append(proc.pid)
-            groups[root.pid] = group
-        }
-
-        // Below ~25 MB a service isn't worth a row or the risk of freezing it.
-        let threshold: UInt64 = 25 * 1024 * 1024
-        return groups.values
-            .filter { $0.resident >= threshold }
-            .sorted { $0.resident > $1.resident }
-            .prefix(40)
-            .map { group in
-                let pid = group.info.pid
-                let frozen = ProcessControl.isStopped(pid)
-                var samples = history[pid] ?? []
-                if !frozen {
-                    samples.append(group.resident)
-                    if samples.count > historyLimit { samples.removeFirst(samples.count - historyLimit) }
-                    history[pid] = samples
-                }
-                return AppEntry(
-                    id: "svc-\(pid)",
-                    pid: pid,
-                    name: group.info.name,
-                    bundleID: nil,
-                    icon: nil,
-                    resident: group.resident,
-                    footprint: group.footprint,
-                    reclaimedBytes: frozen
-                        ? (footprintAtPause[pid].map { $0 > group.resident ? $0 - group.resident : 0 } ?? 0)
-                        : 0,
-                    state: frozen ? .paused : .running,
-                    launchDate: nil,
-                    history: samples,
-                    kind: .service)
-            }
-    }
-
     // MARK: - Local Model Mode
 
-    /// Suspend background apps and services, heaviest first, until `targetBytes` of RAM has
-    /// been handed back — for freeing headroom to run a local model. Never touches the
-    /// frontmost app, protected processes, or anything already suspended.
-    func reclaim(targetBytes: UInt64) {
+    /// Apps that Free Up Memory may offer to pause.
+    ///
+    /// Never includes this app, the app you're currently using, or anything you've
+    /// previously opted out of. Background services are deliberately absent: freezing
+    /// daemons broke the machine badly enough to make the feature unusable.
+    var reclaimCandidates: [AppEntry] {
         let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        return entries.filter { entry in
+            guard entry.state == .running, let pid = entry.pid else { return false }
+            guard pid != frontmost else { return false }
+            guard !ProcessControl.treeContainsSelf(root: pid) else { return false }
+            return !AppSettingsStore.shared.settings(for: entry.bundleID).excludedFromReclaim
+        }
+        .sorted { $0.resident > $1.resident }
+    }
+
+    /// Pause exactly the apps the user ticked — no target-chasing, no extras.
+    func reclaim(selected: [AppEntry]) {
         var freed: UInt64 = 0
         var touched: [pid_t] = []
+        var skipped: [String] = []
 
-        let candidates = entries
-            .filter { $0.state == .running && $0.pid != nil && $0.pid != frontmost }
-            .sorted { $0.resident > $1.resident }
-
-        for entry in candidates {
-            guard freed < targetBytes, let pid = entry.pid else { break }
+        for entry in selected {
+            guard let pid = entry.pid else { continue }
             footprintAtPause[pid] = entry.footprint
-            guard ProcessControl.pauseTree(root: pid) else { continue }
-            if entry.kind == .app {
-                PausedStore.shared.add(PausedRecord(
-                    pid: pid, bundleID: entry.bundleID, name: entry.name, launchDate: entry.launchDate))
+            guard ProcessControl.pauseTree(root: pid) else {
+                skipped.append(entry.name)   // refused, e.g. it would have frozen us
+                continue
             }
+            PausedStore.shared.add(PausedRecord(
+                pid: pid, bundleID: entry.bundleID, name: entry.name, launchDate: entry.launchDate))
             freed += entry.resident
             touched.append(pid)
         }
 
         reclaimSession = touched
-        notice = touched.isEmpty
-            ? "Nothing left to suspend — everything is already frozen or protected."
-            : "Froze \(touched.count) items, reclaiming about \(MenuView.fmt(freed))."
+        if touched.isEmpty {
+            notice = "Nothing was paused."
+        } else {
+            notice = "Paused \(touched.count) app\(touched.count == 1 ? "" : "s"), freeing about \(MenuView.fmt(freed))."
+        }
+        if !skipped.isEmpty {
+            notice = (notice ?? "") + " Skipped \(skipped.joined(separator: ", "))."
+        }
         refresh()
     }
 
@@ -306,17 +242,18 @@ final class AppListModel: ObservableObject {
             PausedStore.shared.remove(pid: pid)
             footprintAtPause[pid] = nil
         }
-        notice = "Restored \(reclaimSession.count) items."
+        notice = "Restored \(reclaimSession.count) app\(reclaimSession.count == 1 ? "" : "s")."
         reclaimSession = []
         refresh()
     }
 
-    /// How much a reclaim could free right now, for the target slider's estimate.
-    var reclaimableBytes: UInt64 {
-        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        return entries
-            .filter { $0.state == .running && $0.pid != nil && $0.pid != frontmost }
-            .reduce(0) { $0 + $1.resident }
+    /// Remember that an app should never be offered by Free Up Memory again.
+    func setExcludedFromReclaim(_ excluded: Bool, for entry: AppEntry) {
+        guard let id = entry.bundleID, !id.isEmpty else { return }
+        var settings = AppSettingsStore.shared.settings(for: id)
+        settings.bundleID = id
+        settings.excludedFromReclaim = excluded
+        AppSettingsStore.shared.update(settings)
     }
 
     private func shouldAutoPause(app: NSRunningApplication, pid: pid_t) -> Bool {

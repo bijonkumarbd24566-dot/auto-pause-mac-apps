@@ -26,9 +26,7 @@ struct MenuView: View {
                 ScrollView {
                     VStack(spacing: 2) {
                         section("SUSPENDED", model.entries.filter { $0.state != .running })
-                        section("APPS", model.entries.filter { $0.state == .running && $0.kind == .app })
-                        section("BACKGROUND SERVICES",
-                                model.entries.filter { $0.state == .running && $0.kind == .service })
+                        section("APPS", model.entries.filter { $0.state == .running })
                     }
                     .padding(6)
                 }
@@ -114,10 +112,6 @@ struct MenuView: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.tertiary)
                 Spacer()
-                if title == "BACKGROUND SERVICES" {
-                    Text("freeze only")
-                        .font(.system(size: 8)).foregroundStyle(.tertiary)
-                }
             }
             .padding(.horizontal, 8)
             .padding(.top, 6)
@@ -273,7 +267,7 @@ private struct AppRow: View {
 
             Spacer(minLength: 4)
 
-            if entry.state != .sleeping && entry.kind == .app {
+            if entry.state != .sleeping {
                 Button { showDetail = true } label: {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.system(size: 12))

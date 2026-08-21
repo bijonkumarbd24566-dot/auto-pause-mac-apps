@@ -81,13 +81,42 @@ enum ProcessControl {
 
     /// Suspend the whole tree. Parent first so it cannot spawn new children mid-freeze,
     /// then re-enumerate and stop descendants.
+    ///
+    /// Refuses outright if the tree contains this process. Freezing ourselves is
+    /// unrecoverable: the menu bar stops responding, so nothing can be resumed, and every
+    /// app frozen in the same sweep stays frozen. This check lives at the signal layer on
+    /// purpose — it holds no matter what the selection logic above it decides.
     @discardableResult
     static func pauseTree(root: pid_t) -> Bool {
+        guard !treeContainsSelf(root: root) else { return false }
         guard kill(root, SIGSTOP) == 0 else { return false }
         for pid in processTree(root: root) where pid != root {
             kill(pid, SIGSTOP)
         }
         return true
+    }
+
+    /// True if `root` is this process, or an ancestor of it, or otherwise has it in its tree.
+    static func treeContainsSelf(root: pid_t) -> Bool {
+        let ownPid = ProcessInfo.processInfo.processIdentifier
+        if root == ownPid { return true }
+        if processTree(root: root).contains(ownPid) { return true }
+
+        // Walk our own ancestry too: a shell or launcher that spawned us would take us
+        // down with it, and cycles in ppid data must not hang the walk.
+        var current = ownPid
+        var hops = 0
+        while hops < 64 {
+            var info = proc_bsdinfo()
+            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(current, PROC_PIDTBSDINFO, 0, &info, size) == size else { break }
+            let parent = pid_t(info.pbi_ppid)
+            if parent <= 1 { break }
+            if parent == root { return true }
+            current = parent
+            hops += 1
+        }
+        return false
     }
 
     /// Resume the whole tree. Children first, parent last.
@@ -98,83 +127,5 @@ enum ProcessControl {
             kill(pid, SIGCONT)
         }
         return kill(root, SIGCONT) == 0
-    }
-}
-
-// MARK: - System-wide process enumeration
-
-extension ProcessControl {
-
-    struct ProcInfo {
-        let pid: pid_t
-        let ppid: pid_t
-        let uid: uid_t
-        let name: String
-        let path: String
-    }
-
-    /// Processes owned by the current user. We deliberately ignore other users' and root's
-    /// processes: without root we couldn't signal them anyway, so this is both a practical
-    /// and a safety boundary.
-    static func userProcesses() -> [ProcInfo] {
-        let myUID = getuid()
-        var capacity = 4096
-        var pids: [pid_t] = []
-
-        while true {
-            var buf = [pid_t](repeating: 0, count: capacity)
-            let bytes = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &buf,
-                                      Int32(capacity * MemoryLayout<pid_t>.size))
-            guard bytes > 0 else { return [] }
-            let count = Int(bytes) / MemoryLayout<pid_t>.size
-            if count < capacity {
-                pids = Array(buf.prefix(count)).filter { $0 > 0 }
-                break
-            }
-            capacity *= 2
-        }
-
-        return pids.compactMap { pid in
-            var info = proc_bsdinfo()
-            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
-            guard info.pbi_uid == myUID else { return nil }
-
-            let pathMax = 4 * 1024 // PROC_PIDPATHINFO_MAXSIZE, not exported to Swift
-            var pathBuf = [CChar](repeating: 0, count: pathMax)
-            let path = proc_pidpath(pid, &pathBuf, UInt32(pathMax)) > 0
-                ? String(cString: pathBuf) : ""
-
-            let comm = withUnsafePointer(to: info.pbi_comm) {
-                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXCOMLEN)) { String(cString: $0) }
-            }
-            let name = path.isEmpty ? comm : (path as NSString).lastPathComponent
-
-            return ProcInfo(pid: pid, ppid: pid_t(info.pbi_ppid), uid: info.pbi_uid,
-                            name: name, path: path)
-        }
-    }
-
-    /// Processes that must never be signalled — freezing any of these can wedge the UI or
-    /// the login session.
-    static let protectedNames: Set<String> = [
-        // Freezing any of these wedges the UI, the login session, or input handling.
-        "WindowServer", "loginwindow", "Finder", "Dock", "SystemUIServer",
-        "launchd", "kernel_task", "runningboardd", "logind",
-        "ControlCenter", "NotificationCenter", "ControlStrip", "TouchBarServer",
-        "NowPlayingTouchUI", "TextInputMenuAgent", "TextInputSwitcher",
-        "Spotlight", "talagent", "universalaccessd", "UserEventAgent",
-        // Audio, prefs and notification plumbing: freezing these breaks sound and settings.
-        "coreaudiod", "audiomxd", "cfprefsd", "distnoted", "pboard",
-        // Security and identity: freezing these can lock you out of keychain prompts.
-        "securityd", "trustd", "opendirectoryd", "secd", "authd",
-        // Window management / accessibility bridges.
-        "AccessibilityUIServer", "axassetsd", "StatusBarAgent"
-    ]
-
-    static func isProtected(_ info: ProcInfo) -> Bool {
-        if info.pid <= 1 { return true }
-        if info.pid == ProcessInfo.processInfo.processIdentifier { return true }
-        return protectedNames.contains(info.name)
     }
 }

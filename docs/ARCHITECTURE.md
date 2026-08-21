@@ -41,8 +41,12 @@ Everything that talks to the OS about processes. No UI, no state; pure functions
 | `pauseTree(root:)` | `SIGSTOP` **parent first**, then descendants | Parent-first stops it spawning new children mid-freeze, which would escape the sweep. |
 | `resumeTree(root:)` | `SIGCONT` children first, parent last | Reverse order so the parent finds its children already alive. |
 | `isStopped(_:)` | Reads `pbi_status == SSTOP` | Ground truth. Detects apps frozen outside Pause, and survives Pause restarting. |
-| `userProcesses()` | Enumerates every process owned by the current UID via `proc_listpids` | Finds the background services `NSWorkspace` never reports. Filtering to our own UID is also the safety boundary — without root we couldn't signal anything else anyway. |
-| `protectedNames` / `isProtected` | Deny-list of ~30 processes | Freezing `WindowServer`, `ControlCenter` or `coreaudiod` wedges the UI or kills audio. These are never touchable. |
+| `treeContainsSelf(root:)` | Checks whether a tree contains this process, walking both descendants and our own ancestry | `pauseTree` refuses when true. Freezing ourselves is unrecoverable: the menu bar stops responding, so nothing can be resumed and everything frozen in the same sweep stays frozen. Enforced at the signal layer so it holds no matter what the caller asks for. |
+
+> **Removed in 1.3:** system-wide daemon enumeration (`userProcesses`, a `protectedNames`
+> deny-list). Listing and freezing background services could leave a Mac hard to operate, and a
+> deny-list is the wrong shape for that risk — you cannot enumerate everything that matters.
+> Auto Pause now only touches apps the user explicitly approves.
 
 **Design note — why no entitlements.** Apple's guidance is to use `libproc` (`proc_pid_rusage`,
 `proc_pidinfo`) rather than `task_for_pid()`, which is SIP-restricted to development tools.
@@ -81,14 +85,13 @@ normal save sheet and stay open; Pause reports `.refused` and leaves them merely
 `@MainActor ObservableObject`, refreshed every 3 s while the panel is open.
 
 - **Three states** per entry: `.running`, `.paused` (SIGSTOP), `.sleeping` (quit, resumable).
-- **Two kinds**: `.app` (pause or deep sleep) and `.service` (freeze only — daemons have no
-  state-restoration contract, and quitting them breaks sync/backups).
-- **`serviceEntries(excluding:)`** — takes every user process not already inside a Dock app's
-  tree, walks each up to its top-level ancestor under `launchd`, and groups by that ancestor.
-  One row per *service* rather than a dozen anonymous child pids. Filters below 25 MB, caps at 40.
-- **`reclaim(targetBytes:)`** — Local Model Mode. Freezes background apps and services
-  heaviest-first until the target is met. Skips the frontmost app, protected processes and
-  anything already suspended. Records the exact pid set as a `reclaimSession`.
+- **Apps only.** Entries come solely from `NSWorkspace.runningApplications` filtered to
+  `.regular`, so daemons never enter the list.
+- **`reclaimCandidates`** — apps Free Up Memory may *offer*. Excludes this app, the frontmost
+  app, anything whose tree contains us, and anything the user opted out of.
+- **`reclaim(selected:)`** — pauses exactly the apps the user ticked. No target-chasing and no
+  extras; if `pauseTree` refuses one, it is reported rather than silently skipped. Records the
+  pid set as a `reclaimSession`.
 - **`restoreReclaimSession()`** — undoes precisely what that run froze, leaving anything you
   froze by hand still frozen.
 - **Sort order** — suspended entries pin to the top. They hold 0 resident RAM, so sorting purely
@@ -128,7 +131,7 @@ All atomic JSON in `~/Library/Application Support/Pause/` (path kept stable acro
 | `MenuView.swift` | The panel: ring gauge, system usage graph, and the list in three sections — SUSPENDED, APPS, BACKGROUND SERVICES. Sizes itself to the screen height (a `ScrollView` has no intrinsic size, so it needs an explicit height or the window collapses). |
 | `DetailViews.swift` | `SparklineView`, `UsageAreaChart` (plotted against total RAM so normal fluctuation looks normal, not like a mountain range), and the per-app detail popover with auto-pause settings. |
 | `SystemDetailView.swift` | Ring gauge, usage history, App/Wired/Compressed/Free/Swap breakdown, top processes. |
-| `ReclaimView.swift` | Local Model Mode: target slider, feasibility estimate, and Restore. |
+| `ReclaimView.swift` | Free Up Memory: a reviewable checklist of what will be paused, with running totals, before anything happens. Recording and call apps start unticked. Opt-outs can be remembered. |
 | `DeepSleepWarningView.swift` | First-run warning: explains Deep Sleep actually quits the app, reports that app's restore status, offers to enable window restore. |
 | `PauseApp.swift` | `MenuBarExtra` host plus the `NSApplicationDelegate`. Presents the first-run walkthrough in a real `NSWindow` (an `LSUIElement` app isn't activated by default, so it calls `NSApp.activate` explicitly), and resumes every frozen app on quit so nothing is ever stranded. |
 | `OnboardingView.swift` | Four-page animated walkthrough: welcome, the two tiers, Free Up Memory, and where to find the app + start-at-login. Exists because a menu-bar-only app with no Dock icon is easy to lose immediately after installing. |

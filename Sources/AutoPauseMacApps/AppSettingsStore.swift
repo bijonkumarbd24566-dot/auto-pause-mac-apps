@@ -5,6 +5,8 @@ struct AppSettings: Codable, Equatable {
     var bundleID: String
     var autoPauseEnabled: Bool = false
     var autoPauseMinutes: Int = 10
+    /// Never offer this app in Free Up Memory. Set when the user unticks it there.
+    var excludedFromReclaim: Bool = false
 }
 
 /// Global, one-off flags.
