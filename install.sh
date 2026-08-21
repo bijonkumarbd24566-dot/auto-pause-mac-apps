@@ -15,13 +15,23 @@
 # body first. Child processes also get </dev/null so they cannot consume it.
 set -euo pipefail
 
+# Global, not local to main(): the EXIT trap runs after main() returns, when a
+# local would be out of scope and `set -u` would abort on it.
+APP_TMP=""
+cleanup() {
+  [[ -n "$APP_TMP" ]] || return 0
+  hdiutil detach "$APP_TMP/mnt" -quiet 2>/dev/null || true
+  rm -rf "$APP_TMP"
+}
+trap cleanup EXIT
+
 main() {
   local repo="fazalrshah/auto-pause-mac-apps"
   local app_name="Auto Pause Mac Apps.app"
   local install_dir="/Applications"
   local tmp
   tmp=$(mktemp -d)
-  trap 'hdiutil detach "$tmp/mnt" -quiet 2>/dev/null || true; rm -rf "$tmp"' EXIT
+  APP_TMP="$tmp"
 
   echo "▸ Finding the latest release..."
   local url
